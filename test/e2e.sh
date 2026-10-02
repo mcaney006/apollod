@@ -142,13 +142,14 @@ check "metrics timeouts +1"                 "$(d timeouts)" 1
 
 # --- 2000 connections from one process
 if [ "$(ulimit -n)" -ge 4200 ]; then
-    /bin/bash -c "for i in \$(seq 10 2009); do eval \"exec \$i<>/dev/tcp/$H/$P\" || exit 9; done; read -t 60 <&10" & BIG=$!
-    n=0
+    /bin/bash -c "for i in \$(seq 10 2009); do eval \"exec \$i<>/dev/tcp/$H/$P\" || exit 9; done; : > '$T/big-ready'; read -t 60 <&10" & BIG=$!
     for i in $(seq 1 100); do
-        n=$(lsof -p $SP 2>/dev/null | grep -c TCP)
-        [ "$n" -ge 2001 ] && break
+        [ -f "$T/big-ready" ] && break
+        kill -0 "$BIG" 2>/dev/null || break
         sleep 0.1
     done
+    check "2000 connections held: client connected" "$([ -f "$T/big-ready" ] && echo yes || echo no)" yes
+    n=$(lsof -p $SP 2>/dev/null | grep -c TCP)
     check "2000 connections held: all accepted" "$n" 2001
     check "2000 connections held: served"       "$(code $U/)" 200
     kill $BIG 2>/dev/null; wait $BIG 2>/dev/null
